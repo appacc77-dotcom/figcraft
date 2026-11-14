@@ -155,6 +155,15 @@ pub(super) fn variable_value(d: &Kv) -> Option<Value> {
         return Some(json!({"type": "VARIABLE_ALIAS", "id": a}));
     }
     let v = d.get("value")?;
+    // COMPOSE_COLOR (expressionFunction 20): a colour variable at an opacity — the "selected"
+    // tint. The expression names a colour variable and a percentage; the document keeps the
+    // reference with a 0..1 opacity, so token export still resolves it per mode.
+    if let Some(e) = v.get("expressionValue").filter(|e| e.get("expressionFunction").and_then(Kv::str) == Some("COMPOSE_COLOR")) {
+        let args = e.get("expressionArguments").map(Kv::list).unwrap_or_default();
+        let variable = args.first().and_then(|a| alias(Some(a)))?;
+        let opacity = args.get(1).and_then(|a| a.get("value")).and_then(|v| num(v, "floatValue"))?;
+        return Some(json!({"type": "COLOR_ALPHA", "variable": variable, "opacity": (opacity / 100.0).clamp(0.0, 1.0)}));
+    }
     if let Some(c) = v.get("colorValue") {
         return Some(color(c));
     }

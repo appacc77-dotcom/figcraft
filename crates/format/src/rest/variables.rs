@@ -60,6 +60,17 @@ pub(super) fn value(kind: VariableType, v: &Value) -> Option<VariableValue> {
     if let Some(a) = alias(v) {
         return Some(VariableValue::Alias(clip_str(a).to_string()));
     }
+    // Colours at an opacity (a `.fig` import's COMPOSE_COLOR): a reference plus a 0..1 opacity.
+    // Figma's REST variables JSON has no such shape, so this is ours alone; reading it keeps the
+    // calculation instead of dropping the variable the way a plain colour read would.
+    if text(v, "type") == Some("COLOR_ALPHA") {
+        let variable = text(v, "variable")?;
+        let opacity = v.get("opacity").and_then(Value::as_f64)?;
+        return Some(VariableValue::ColorAlpha {
+            variable: clip_str(variable).to_string(),
+            opacity: (opacity.clamp(0.0, 1.0)) as f32,
+        });
+    }
     Some(match kind {
         VariableType::Color => VariableValue::Color(color(v)?),
         VariableType::Number => VariableValue::Number(v.as_f64().filter(|x| x.is_finite())?.clamp(-1e9, 1e9)),
