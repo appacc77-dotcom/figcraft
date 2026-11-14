@@ -337,7 +337,9 @@ impl<'c, 'a> Markup<'c, 'a> {
         {
             attrs.push_str(&format!(" v-if=\"{guard}\""));
         }
-        let open = |tag: &str| format!("{pad}<{tag} {attr}=\"{class}\"{attrs}>");
+        // Локальный патч пилота: id слоя в разметке, чтобы привязывать ассеты к узлам,
+        // а не к порядку плейсхолдеров (data-node).
+        let open = |tag: &str| format!("{pad}<{tag} {attr}=\"{class}\"{attrs} data-node=\"{}\">", n.id);
         match &n.kind {
             NodeKind::Text(t) => {
                 let body = self.text_body(n, t);
