@@ -9,6 +9,28 @@ use super::{
 
 // ------------------------------------------------------------------ CSS
 
+/// CSS `background` for an image fill. Crop keeps Figma's crop transform (the stored matrix maps
+/// the layer's unit box to image uv), so percentages and offsets of the picture match the canvas
+/// instead of a generic cover; Fill/Fit/Tile use their obvious CSS equivalents.
+fn image_background(img: &figcraft_color::ImagePaint, w: f64, h: f64) -> String {
+    use figcraft_color::ImageScaleMode;
+    match img.scale_mode {
+        ImageScaleMode::Crop if img.rotation.rem_euclid(2) == 0 => {
+            let Some(m) = img.crop.filter(|c| c.iter().all(|v| v.is_finite()) && c[0].abs() > 1e-9 && c[3].abs() > 1e-9) else {
+                return "url(image.png) center / cover".into();
+            };
+            let width = w / m[0];
+            let height = h / m[3];
+            let x = -w * m[4] / m[0];
+            let y = -h * m[5] / m[3];
+            format!("url(image.png) {}px {}px / {}px {}px", num(x), num(y), num(width), num(height))
+        }
+        ImageScaleMode::Fit => "url(image.png) center / contain".into(),
+        ImageScaleMode::Tile => "url(image.png) repeat".into(),
+        _ => "url(image.png) center / cover".into(),
+    }
+}
+
 /// The CSS custom properties generated code uses: name → fallback value, in first-use order.
 #[derive(Default)]
 pub(crate) struct Tokens {
@@ -170,7 +192,7 @@ pub(crate) fn css_decls(doc: &Document, n: &Node, t: &mut Tokens, hug: (bool, bo
                     put("color", if i == 0 { tok(doc, n, &["fill"], c, t) } else { c });
                 }
                 PaintKind::Gradient(g) => put("background", css_gradient(g, n.width, n.height, p.opacity)),
-                PaintKind::Image(_) => put("background", "url(image.png) center / cover".into()),
+                PaintKind::Image(img) => put("background", image_background(img, n.width, n.height)),
                 PaintKind::Pattern(_) => put("background", "url(pattern.png) repeat".into()),
             }
         }
@@ -196,7 +218,7 @@ pub(crate) fn css_decls(doc: &Document, n: &Node, t: &mut Tokens, hug: (bool, bo
                     }
                 }
                 PaintKind::Gradient(g) => css_gradient(g, n.width, n.height, p.opacity),
-                PaintKind::Image(_) => "url(image.png) center / cover".into(),
+                PaintKind::Image(img) => image_background(img, n.width, n.height),
                 PaintKind::Pattern(_) => "url(pattern.png) repeat".into(),
             })
             .collect();
