@@ -317,13 +317,22 @@ impl<'c, 'a> Markup<'c, 'a> {
         if self.instance_call(n, depth, path, &class, &decls, root) {
             return;
         }
-        let hugs = n.layout.is_some() || matches!(n.kind, NodeKind::Text(_));
+        // Пустой auto-layout фрейм не может «обнимать» содержимое: размер задаёт он сам
+        // (иначе фото-фрейм с image-fill получает нулевую высоту и пропадает).
+        let hugs = (n.layout.is_some() && !n.children.is_empty()) || matches!(n.kind, NodeKind::Text(_));
         let hug = (hugs && n.child_layout.sizing_h == Sizing::Hug, hugs && n.child_layout.sizing_v == Sizing::Hug);
         let mut own = css_decls(doc, n, &mut self.tokens, hug);
         let page = self.ctx.doc.node(self.ctx.root).map_or(f64::INFINITY, |r| r.width);
         if self.fluid && (n.layout.is_some() || matches!(n.kind, NodeKind::Text(_)) || (!root && n.width >= page * self.fluid_leaves)) {
-            // Full width, or sized by the flex row (`flex: 1`): no cap needed.
-            own = fluid(&own, n.width >= page - 0.5 || decls.contains("flex: 1 1 0;"), n.layout.is_some());
+            // Кап по ширине макета сохраняем и для детей flex-строк: `flex: 1` растит бокс,
+            // но не отменяет max-width (иначе контейнеры 1280/1184 разъезжаются на всю страницу).
+            own = fluid(&own, n.width >= page - 0.5, n.layout.is_some());
+        }
+        if hug.0 && !matches!(n.kind, NodeKind::Text(_)) && !n.children.is_empty() {
+            // Figma считает hug-ширину фрейма по содержимому; в CSS shrink-to-fit внутри
+            // узкого родителя зажимает её и текст переносится раньше макета. Фиксируем
+            // измеренную ширину узла (для text остаётся адаптивный перенос).
+            own = format!("width: {}px;\n{own}", num(n.width));
         }
         if n.layout.is_none() && !n.children.is_empty() && !root && in_flow {
             own.push_str("position: relative;\n");
@@ -339,7 +348,8 @@ impl<'c, 'a> Markup<'c, 'a> {
         }
         // Локальный патч пилота: id слоя в разметке, чтобы привязывать ассеты к узлам,
         // а не к порядку плейсхолдеров (data-node).
-        let open = |tag: &str| format!("{pad}<{tag} {attr}=\"{class}\"{attrs} data-node=\"{}\">", n.id);
+        let node_attr = if crate::codegen::data_node() { format!(" data-node=\"{}\">", n.id) } else { ">".to_string() };
+        let open = |tag: &str| format!("{pad}<{tag} {attr}=\"{class}\"{attrs}{node_attr}");
         match &n.kind {
             NodeKind::Text(t) => {
                 let body = self.text_body(n, t);

@@ -32,6 +32,18 @@ pub(crate) use css::Tokens;
 pub(crate) use css::css_decls;
 pub use css::{CssNames, css_var_name, css_var_of};
 use css::{css, tok};
+/// Локальный патч пилота: `data-node` в разметке включается параметром `inspect.code`
+/// (`dataNode: true`), чтобы апстрим-тесты и обычный экспорт оставались без атрибута.
+static DATA_NODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) fn data_node() -> bool {
+    DATA_NODE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub(crate) fn set_data_node(on: bool) {
+    DATA_NODE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub(crate) use flutter::{FLUTTER_IMPORT, Place, flutter, flutter_indent};
 use html::html;
 pub(crate) use html::{Markup, Names, class_name};
@@ -41,7 +53,7 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![spec!(
         "inspect.code",
         "Code for layer",
-        "{id?, language?: css|html|react|leptos|vue|tailwind|swiftui|compose|arkui|flutter (default css; html, react, leptos and vue are the whole layer tree; components take their properties as parameters, instances pass their values; a component connected to code (codeConnect.set) gives its import and snippet instead; tailwind is React with Tailwind CSS v4 utilities for pages: fluid auto layout boxes, instances inlined with their overrides, bound variables as theme utilities), mobile? (tailwind: a mobile frame with the same layer names; the code is mobile first with the desktop layer's classes behind lg:), unit?: px|rem (CSS, HTML, React, Leptos and Vue; default px), rootFontSize? (rem: pixels per rem, default 16)} → {code, language, connected}",
+        "{id?, language?: css|html|react|leptos|vue|tailwind|swiftui|compose|arkui|flutter (default css; html, react, leptos and vue are the whole layer tree; components take their properties as parameters, instances pass their values; a component connected to code (codeConnect.set) gives its import and snippet instead; tailwind is React with Tailwind CSS v4 utilities for pages: fluid auto layout boxes, instances inlined with their overrides, bound variables as theme utilities), mobile? (tailwind: a mobile frame with the same layer names; the code is mobile first with the desktop layer's classes behind lg:), unit?: px|rem (CSS, HTML, React, Leptos and Vue; default px), rootFontSize? (rem: pixels per rem, default 16), dataNode? (add data-node=\"<layer id>\" to every element; default false)} → {code, language, connected}",
         false,
         |s, p| {
             let cmd = "inspect.code";
@@ -64,6 +76,8 @@ pub fn specs() -> Vec<CommandSpec> {
             if !doc.contains(id) {
                 return Err(bad(cmd, "no such layer"));
             }
+            // Локальный патч пилота: id слоя в разметке по запросу (для привязки ассетов).
+            set_data_node(p.get("dataNode").and_then(serde_json::Value::as_bool).unwrap_or(false));
             let connected = crate::code_connect::link(doc, id, lang).is_some();
             let mobile = match get(p, "mobile") {
                 None | Some(serde_json::Value::Null) => None,
@@ -73,6 +87,7 @@ pub fn specs() -> Vec<CommandSpec> {
                 (CodeLang::Tailwind, Some(m)) => crate::tailwind::code(doc, id, Some(m)),
                 _ => code_for(doc, id, lang),
             };
+            set_data_node(false);
             let code = match rem {
                 Some(root) if lang.is_web() => px_to_rem(&code, root),
                 _ => code,

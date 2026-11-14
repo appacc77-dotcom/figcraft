@@ -415,3 +415,59 @@ fn a_max_width_that_differs_still_goes_fluid_on_mobile() {
     assert!(banner.contains("lg:max-w-[1280px]"), "the page-wide box is capped from lg: {banner}");
     assert!(!banner.split_whitespace().any(|c| c == "max-w-[1280px]" || c == "max-w-[342px]"), "no phone-width cap below lg: {banner}");
 }
+#[test]
+fn empty_auto_layout_frame_keeps_its_size() {
+    // Фото-фрейм без детей (image fill) не должен схлопываться в 0: hug у пустого auto-layout
+    // фрейма невозможен, размер берётся из узла.
+    let mut s = Session::new();
+    let p = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 300, "name": "Parent"})));
+    ex(&mut s, "layout.add", json!({"ids": [p], "direction": "vertical"}));
+    let photo = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 200, "height": 150, "parent": p, "name": "about-photo"})));
+    ex(&mut s, "layout.add", json!({"ids": [photo], "direction": "horizontal"}));
+    {
+        let node = s.doc_mut().unwrap().node_mut(photo).unwrap();
+        node.width = 200.0;
+        node.height = 150.0;
+        node.child_layout.sizing_h = figcraft_doc::Sizing::Fixed;
+        node.child_layout.sizing_v = figcraft_doc::Sizing::Hug;
+    }
+    let out = code(&mut s, p, json!({}));
+    assert!(out.contains("min-h-[150px]") || out.contains("h-[150px]"), "photo keeps its height: {out}");
+}
+#[test]
+fn fill_child_keeps_its_max_width_cap() {
+    // flex: 1 растит бокс, но max-width из макета должен остаться (иначе контейнер 1280 в 1440
+    // растягивается на всю страницу и ломает переносы).
+    let mut s = Session::new();
+    let p = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 1440, "height": 900, "name": "Page"})));
+    ex(&mut s, "layout.add", json!({"ids": [p], "direction": "vertical"}));
+    let row = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 1440, "height": 300, "parent": p, "name": "Row"})));
+    ex(&mut s, "layout.add", json!({"ids": [row], "direction": "horizontal"}));
+    let card = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 1280, "height": 300, "parent": row, "name": "Container"})));
+    ex(&mut s, "layout.add", json!({"ids": [card], "direction": "vertical"}));
+    ex(&mut s, "node.set", json!({"id": card, "props": {"sizingH": "fill", "maxWidth": 1280}}));
+    let out = code(&mut s, p, json!({}));
+    assert!(out.contains("max-w-[1280px]"), "cap stays on a flex child: {out}");
+}
+#[test]
+fn hug_frame_keeps_its_measured_width() {
+    // Hug-фрейм в узком родителе должен сохранить ширину макета, иначе текст переносится раньше.
+    let mut s = Session::new();
+    let p = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 300, "name": "Parent"})));
+    ex(&mut s, "layout.add", json!({"ids": [p], "direction": "vertical"}));
+    let card = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 200, "height": 100, "parent": p, "name": "Card"})));
+    ex(&mut s, "layout.add", json!({"ids": [card], "direction": "vertical"}));
+    let child = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 120, "height": 40, "parent": card, "name": "Line"})));
+    ex(&mut s, "node.set", json!({"id": child, "props": {"sizingH": "fill"}}));
+    // Последним шагом: любая команда выше пересчитывает hug-ширину обратно.
+    {
+        let node = s.doc_mut().unwrap().node_mut(card).unwrap();
+        node.width = 200.0;
+        node.child_layout.sizing_h = figcraft_doc::Sizing::Hug;
+    }
+    let out = {
+        let doc = s.doc().unwrap();
+        crate::codegen::code_for(doc, p, crate::codegen::CodeLang::Tailwind)
+    };
+    assert!(out.contains("w-[200px]") || out.contains("w-50"), "hug keeps measured width: {out}");
+}
