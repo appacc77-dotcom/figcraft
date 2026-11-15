@@ -257,13 +257,26 @@ fn layout_decls(doc: &Document, n: &Node, l: &figcraft_doc::AutoLayout, t: &mut 
         put("flex-wrap", "wrap".into());
     }
     put("gap", tok_length(doc, n, &["gap"], l.gap, t));
-    let [pt, pr, pb, pl] = l.padding;
-    let sides = [
-        tok_length(doc, n, &PADDING[0], pt, t),
-        tok_length(doc, n, &PADDING[1], pr, t),
-        tok_length(doc, n, &PADDING[2], pb, t),
-        tok_length(doc, n, &PADDING[3], pl, t),
-    ];
+    // strokesIncluded: Figma кладёт внутреннюю обводку в раскладку — дети начинаются на
+    // stroke.weight дальше от края. CSS-паддинги должны включать её, иначе весь контент
+    // уезжает на эту величину (переключатель choice-sex: 0,67 px влево/вверх).
+    let included = l.strokes_included && n.has_visible_stroke() && n.stroke.align == figcraft_doc::StrokeAlign::Inside;
+    let [pt, pr, pb, pl] = if included {
+        let sides: [f64; 4] = figcraft_layout::insets(n, l).into();
+        sides
+    } else {
+        l.padding
+    };
+    let sides = if included {
+        [pt, pr, pb, pl].map(|v| format!("{}px", num(v)))
+    } else {
+        [
+            tok_length(doc, n, &PADDING[0], pt, t),
+            tok_length(doc, n, &PADDING[1], pr, t),
+            tok_length(doc, n, &PADDING[2], pb, t),
+            tok_length(doc, n, &PADDING[3], pl, t),
+        ]
+    };
     put("padding", sides.join(" "));
     let justify = match l.main_align {
         MainAlign::Min => "flex-start",

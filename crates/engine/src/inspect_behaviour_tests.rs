@@ -381,3 +381,15 @@ fn vertical_text_alignment_centers_the_line_box() {
     let tw = { let doc = s.doc().unwrap(); crate::codegen::code_for(doc, t, crate::codegen::CodeLang::Tailwind) };
     assert!(tw.contains("flex"), "tailwind flex: {tw}");
 }
+#[test]
+fn strokes_included_padding_includes_the_inside_stroke() {
+    // Figma auto layout with strokesIncluded: дети начинаются на stroke.weight от края;
+    // CSS-паддинг обязан включать эту величину, иначе контент сдвинут.
+    let mut s = Session::new();
+    let f = id(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "props": {"width": 100, "height": 40}})));
+    ex(&mut s, "node.set", json!({"id": f, "props": {"stroke": "#000000", "strokeWeight": 2, "strokeAlign": "inside", "strokesIncluded": true}}));
+    let c = css(&mut s, f);
+    assert!(c.contains("padding: 2px 2px 2px 2px;") || c.contains("padding: 2px;"), "stroke in padding: {c}");
+    let tw = { let doc = s.doc().unwrap(); crate::codegen::code_for(doc, f, crate::codegen::CodeLang::Tailwind) };
+    assert!(tw.contains("p-[2px]"), "tailwind stroke padding: {tw}");
+}
