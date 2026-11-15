@@ -402,17 +402,39 @@ fn css_borders(doc: &Document, n: &Node, t: &mut Tokens) -> Vec<(String, String)
     let Some(c) = stroke_color(n) else { return Vec::new() };
     let Some(sides) = n.stroke.sides else {
         let weight = tok(doc, n, &["strokeWeight"], format!("{}px", num(n.stroke.weight)), t);
-        return vec![("border".into(), format!("{weight} solid {}", tok(doc, n, &["stroke"], c.to_css(), t)))];
+        let color = tok(doc, n, &["stroke"], c.to_css(), t);
+        // Figma-обводка не занимает место в потоке (strokesIncluded=false): border сдвигал
+        // детей на свою ширину (шапка/карточки уезжали на 0,5–1 px). outline рисуется поверх.
+        if !n.layout.as_ref().is_some_and(|l| l.strokes_included) && n.stroke.align == figcraft_doc::StrokeAlign::Inside {
+            return vec![("outline".into(), format!("{weight} solid {color}")), ("outline-offset".into(), format!("-{weight}"))];
+        }
+        return vec![("border".into(), format!("{weight} solid {color}"))];
     };
     let color = tok(doc, n, &["stroke"], c.to_css(), t);
     let named = ["top", "right", "bottom", "left"].into_iter().zip(crate::cmd::props::STROKE_SIDES);
-    named
-        .zip(sides)
-        .filter(|(_, weight)| *weight > 0.0)
-        .map(|((side, field), weight)| {
-            (format!("border-{side}"), format!("{} solid {color}", tok(doc, n, &[field], format!("{}px", num(weight)), t)))
-        })
-        .collect()
+    let inside = !n.layout.as_ref().is_some_and(|l| l.strokes_included) && n.stroke.align == figcraft_doc::StrokeAlign::Inside;
+    let mut shadows = Vec::new();
+    let mut borders = Vec::new();
+    for ((side, field), weight) in named.zip(sides).filter(|(_, weight)| *weight > 0.0) {
+        let w = tok(doc, n, &[field], format!("{}px", num(weight)), t);
+        if inside {
+            // Обводка не должна занимать место в потоке: рисуем её inset-тенью с нужной стороны.
+            let zero = "0".to_string();
+            let (x, y) = match side {
+                "top" => (zero, w.clone()),
+                "bottom" => (zero, format!("-{w}")),
+                "left" => (w.clone(), zero),
+                _ => (format!("-{w}"), zero),
+            };
+            shadows.push(format!("inset {x} {y} 0 0 {color}"));
+        } else {
+            borders.push((format!("border-{side}"), format!("{w} solid {color}")));
+        }
+    }
+    if !shadows.is_empty() {
+        borders.push(("box-shadow".into(), shadows.join(", ")));
+    }
+    borders
 }
 
 fn drop_shadow(n: &Node) -> Option<&Shadow> {

@@ -353,7 +353,9 @@ fn text_decls(doc: &Document, n: &Node, tx: &figcraft_doc::TextData, t: &mut Tok
     }
     match s.line_height {
         LineHeight::Pixels(v) => put("line-height", tok(doc, n, &["lineHeight"], px(v), t)),
-        LineHeight::Percent(p) => put("line-height", format!("{}%", num(p))),
+        // Figma считает высоту строки в целых пикселях: 29 px × 133 % → 39 px, а не 38,57.
+        // Дробный line-height копит −4 px на секцию и сдвигает весь дальнейший поток.
+        LineHeight::Percent(p) => put("line-height", px((s.font_size * p / 100.0).round())),
         LineHeight::Auto => {}
     }
     // Figma-текст, у которого высота ровно одна строка, не переносится; браузерный перенос

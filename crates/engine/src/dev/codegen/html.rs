@@ -347,7 +347,9 @@ impl<'c, 'a> Markup<'c, 'a> {
             // измеренную ширину узла (для text остаётся адаптивный перенос).
             own = format!("width: {}px;\n{own}", num(n.width));
         }
-        if n.layout.is_none() && !n.children.is_empty() && !root && in_flow {
+        // Абсолютные дети позиционируются от своей рамки, в том числе внутри auto-layout
+        // родителя: без relative они уезжают к корню секции (табы/счётчики слайдера).
+        if !n.children.is_empty() && !root && in_flow {
             own.push_str("position: relative;\n");
         }
         decls.push_str(&own);

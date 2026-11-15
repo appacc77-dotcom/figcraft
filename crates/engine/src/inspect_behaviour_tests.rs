@@ -165,7 +165,7 @@ fn typography_rows_and_css() {
         ("font-family: \"Inter\";", "the family, quoted"),
         ("font-size: 24px;", "the size in pixels"),
         ("font-weight: 400;", "Regular is weight 400"),
-        ("line-height: 150%;", "a percent line height stays a percentage"),
+        ("line-height: 36px;", "a percent line height is whole pixels like Figma (24 px × 150 %)"),
         ("letter-spacing: 0.05em;", "percent letter spacing is a fraction of the font size (em)"),
         ("text-align: center;", "alignment becomes text-align"),
         ("text-transform: uppercase;", "upper case becomes text-transform"),
@@ -202,7 +202,7 @@ fn css_for_common_layers() {
         (plain, "background: #FF0000;", "a solid fill is the background"),
         (styled, "border-radius: 8px;", "corner radius is border-radius"),
         (styled, "opacity: 0.5;", "layer opacity is opacity"),
-        (styled, "border: 2px solid #000000;", "docs silent: a stroke is a solid border of its weight"),
+        (styled, "outline: 2px solid #000000;", "docs silent: a stroke is an inset outline of its weight"),
         (styled, "mix-blend-mode: multiply;", "a blend mode is mix-blend-mode"),
         (styled, "transform: rotate(-30deg);", "rotation turns counter-clockwise, CSS rotate turns clockwise"),
         (linear, "background: linear-gradient(90deg, ", "a linear gradient keeps its direction (left to right is 90deg)"),
@@ -223,7 +223,7 @@ fn css_borders_follow_individual_stroke_sides() {
     let r = rect(&mut s, 0.0, 0.0, 100.0, 50.0, None);
     set(&mut s, &[r], json!({"strokes": ["#000000"], "strokeWeight": 1, "strokeSides": [0, 0, 2, 0]}));
     let c = css(&mut s, r);
-    assert!(c.contains("border-bottom: 2px solid #000000;"), "{c}");
+    assert!(c.contains("inset 0 -2px 0 0 #000000;"), "{c}");
     assert!(!c.contains("border:") && !c.contains("border-top") && !c.contains("border-right") && !c.contains("border-left"), "{c}");
 
     let col = ex(&mut s, "variable.createCollection", json!({"name": "Borders"}));
@@ -231,8 +231,8 @@ fn css_borders_follow_individual_stroke_sides() {
     ex(&mut s, "variable.create", json!({"collection": col, "name": "border/top", "type": "number", "value": 3}));
     ex(&mut s, "variable.bind", json!({"ids": [r], "field": "strokeTopWeight", "variable": "border/top"}));
     let c = css(&mut s, r);
-    assert!(c.contains("border-top: var(--border-top, 3px) solid #000000;"), "{c}");
-    assert!(c.contains("border-bottom: 2px solid #000000;"), "{c}");
+    assert!(c.contains("inset 0 var(--border-top, 3px) 0 0 #000000"), "{c}");
+    assert!(c.contains("inset 0 -2px 0 0 #000000;"), "{c}");
 }
 
 #[test]

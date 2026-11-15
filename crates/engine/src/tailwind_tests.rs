@@ -64,13 +64,13 @@ fn per_side_strokes_are_borders_on_those_sides() {
     let f = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 300, "height": 60, "name": "Nav"})));
     ex(&mut s, "node.set", json!({"id": f, "props": {"strokes": ["#262A31"], "strokeWeight": 1, "strokeSides": [0, 0, 1, 0]}}));
     let css = ex(&mut s, "inspect.code", json!({"id": f, "language": "css"}))["code"].as_str().unwrap_or_default().to_string();
-    assert!(css.contains("border-bottom: 1px solid") && !css.contains("border:"), "{css}");
+    assert!(css.contains("box-shadow: inset 0 -1px 0 0 #262A31;") && !css.contains("border:"), "{css}");
     let tw = code(&mut s, f, json!({}));
-    assert!(tw.contains("border-b ") && (tw.contains("border-[#262a31]") || tw.contains("border-[#262A31]")), "{tw}");
+    assert!(tw.contains("inset") && (tw.contains("262a31") || tw.contains("262A31")), "{tw}");
     // Without per-side weights it is one border.
     ex(&mut s, "node.set", json!({"id": f, "props": {"strokeSides": null, "strokeWeight": 2}}));
     let css = ex(&mut s, "inspect.code", json!({"id": f, "language": "css"}))["code"].as_str().unwrap_or_default().to_string();
-    assert!(css.contains("border: 2px solid"), "{css}");
+    assert!(css.contains("outline: 2px solid"), "{css}");
 }
 
 #[test]
@@ -513,4 +513,32 @@ fn single_line_text_does_not_wrap() {
     ex(&mut s, "node.set", json!({"id": t, "props": {"lineHeight": 170}}));
     let out = code(&mut s, t, json!({}));
     assert!(out.contains("nowrap"), "single-line text keeps one line: {out}");
+}
+#[test]
+fn percent_line_height_rounds_to_whole_pixels() {
+    // Figma: 29 px × 133 % = 39 px на строку; дробные 38,57 копят сдвиг потока.
+    let mut s = Session::new();
+    let t = idv(&ex(&mut s, "text.create", json!({"text": "Если попыток было уже столько", "x": 0, "y": 0})));
+    {
+        let node = s.doc_mut().unwrap().node_mut(t).unwrap();
+        node.height = 39.0;
+        if let figcraft_doc::NodeKind::Text(text) = &mut node.kind {
+            text.style.font_size = 29.0;
+            text.style.line_height = figcraft_doc::LineHeight::Percent(133.0);
+        }
+    }
+    let out = code(&mut s, t, json!({}));
+    assert!(out.contains("leading-[39px]"), "line height is 39 px: {out}");
+}
+#[test]
+fn auto_layout_parent_of_absolute_children_is_relative() {
+    let mut s = Session::new();
+    let p = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 300, "name": "Page"})));
+    ex(&mut s, "layout.add", json!({"ids": [p], "direction": "vertical"}));
+    let row = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 100, "parent": p, "name": "Row"})));
+    ex(&mut s, "layout.add", json!({"ids": [row], "direction": "horizontal"}));
+    let badge = idv(&ex(&mut s, "frame.create", json!({"x": 10, "y": 10, "width": 20, "height": 20, "parent": row, "name": "Badge"})));
+    ex(&mut s, "node.set", json!({"id": badge, "props": {"absolute": true}}));
+    let out = code(&mut s, p, json!({}));
+    assert!(out.matches("relative").count() >= 2, "auto-layout parent is positioned: {out}");
 }
