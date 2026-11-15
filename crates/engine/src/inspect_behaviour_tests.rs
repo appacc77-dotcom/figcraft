@@ -369,3 +369,15 @@ fn linear_gradient_stops_follow_the_handle_line() {
     let c = css(&mut s, r);
     assert!(c.contains("50%") && c.contains("150%"), "stops map to the CSS gradient line: {c}");
 }
+#[test]
+fn vertical_text_alignment_centers_the_line_box() {
+    // TextAlignV Middle/Bottom внутри рамки: CSS ставит текст сверху, нужен flex-контейнер.
+    let mut s = Session::new();
+    let out = ex(&mut s, "text.create", json!({"text": "01", "x": 0, "y": 0, "props": {"fontSize": 13, "width": 32, "height": 32}}));
+    let t = id(&out);
+    ex(&mut s, "node.set", json!({"id": t, "props": {"textAlignVertical": "middle"}}));
+    let c = css(&mut s, t);
+    assert!(c.contains("display: flex;") && c.contains("justify-content: center;"), "vertical center: {c}");
+    let tw = { let doc = s.doc().unwrap(); crate::codegen::code_for(doc, t, crate::codegen::CodeLang::Tailwind) };
+    assert!(tw.contains("flex"), "tailwind flex: {tw}");
+}

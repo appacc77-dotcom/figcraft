@@ -4,7 +4,7 @@ use figcraft_doc::VariableId;
 
 use super::{
     ContentAlign, CrossAlign, Document, EffectKind, LayoutMode, LetterSpacing, LineHeight, MainAlign, Node, NodeId, NodeKind, PADDING, PaintKind,
-    TextAlignH, TextCase, TextDecoration, Variable, css_borders, num,
+    TextAlignH, TextAlignV, TextCase, TextDecoration, Variable, css_borders, num,
 };
 
 // ------------------------------------------------------------------ CSS
@@ -378,6 +378,21 @@ fn text_decls(doc: &Document, n: &Node, tx: &figcraft_doc::TextData, t: &mut Tok
         TextAlignH::Center => put("text-align", "center".into()),
         TextAlignH::Right => put("text-align", "right".into()),
         TextAlignH::Justified => put("text-align", "justify".into()),
+    }
+    // Figma выравнивает текст по вертикали внутри своей рамки; CSS без flex ставит строку
+    // сверху — числа в кружках и подписи кнопок уезжали вверх.
+    match tx.align_v {
+        TextAlignV::Top => {}
+        TextAlignV::Middle => {
+            put("display", "flex".into());
+            put("flex-direction", "column".into());
+            put("justify-content", "center".into());
+        }
+        TextAlignV::Bottom => {
+            put("display", "flex".into());
+            put("flex-direction", "column".into());
+            put("justify-content", "flex-end".into());
+        }
     }
     // CSS has one `text-wrap` per element: written when every paragraph has the same one.
     let wrap = (0..tx.paragraph_count()).map(|p| tx.para_wrap_style(p)).collect::<Vec<_>>();
