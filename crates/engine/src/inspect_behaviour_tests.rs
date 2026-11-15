@@ -393,3 +393,13 @@ fn strokes_included_padding_includes_the_inside_stroke() {
     let tw = { let doc = s.doc().unwrap(); crate::codegen::code_for(doc, f, crate::codegen::CodeLang::Tailwind) };
     assert!(tw.contains("p-[2px]"), "tailwind stroke padding: {tw}");
 }
+#[test]
+fn text_max_lines_clamps_with_ellipsis() {
+    // Figma Max lines: фиксированная высота + обрезка с многоточием (player-teaser на Masters).
+    let mut s = Session::new();
+    let t = id(&ex(&mut s, "text.create", json!({"text": "длинный текст", "x": 0, "y": 0, "props": {"fontSize": 13, "width": 100, "height": 40, "maxLines": 2}})));
+    let c = css(&mut s, t);
+    assert!(c.contains("-webkit-line-clamp: 2;") && c.contains("overflow: hidden;"), "clamp css: {c}");
+    let tw = { let doc = s.doc().unwrap(); crate::codegen::code_for(doc, t, crate::codegen::CodeLang::Tailwind) };
+    assert!(tw.contains("[-webkit-line-clamp:2]"), "clamp tailwind: {tw}");
+}

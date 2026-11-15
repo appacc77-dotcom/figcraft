@@ -407,6 +407,13 @@ fn text_decls(doc: &Document, n: &Node, tx: &figcraft_doc::TextData, t: &mut Tok
             put("justify-content", "flex-end".into());
         }
     }
+    // Figma Max lines: обрезать многострочный текст с многоточием (teaser в player).
+    if tx.max_lines > 0 {
+        put("overflow", "hidden".into());
+        put("display", "-webkit-box".into());
+        put("-webkit-box-orient", "vertical".into());
+        put("-webkit-line-clamp", tx.max_lines.to_string());
+    }
     // CSS has one `text-wrap` per element: written when every paragraph has the same one.
     let wrap = (0..tx.paragraph_count()).map(|p| tx.para_wrap_style(p)).collect::<Vec<_>>();
     match wrap.first().copied().filter(|w| wrap.iter().all(|x| x == w)) {
