@@ -471,3 +471,46 @@ fn hug_frame_keeps_its_measured_width() {
     };
     assert!(out.contains("w-[200px]") || out.contains("w-50"), "hug keeps measured width: {out}");
 }
+#[test]
+fn resolved_padding_beats_a_mismatched_bound_token() {
+    // Инстанс переопределяет padding (16) при привязанной переменной 24: класс должен дать 16,
+    // иначе FAQ-карточки вырастают на 8 px сверху и снизу.
+    let mut s = Session::new();
+    ex(&mut s, "variable.createCollection", json!({"name": "Space"}));
+    ex(&mut s, "variable.create", json!({"collection": "Space", "name": "Space/l", "type": "number", "value": 24}));
+    let f = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 300, "height": 100, "name": "Card"})));
+    ex(&mut s, "layout.add", json!({"ids": [f], "direction": "vertical"}));
+    ex(&mut s, "variable.bind", json!({"ids": [f], "field": "paddingVertical", "variable": "Space/l"}));
+    {
+        let node = s.doc_mut().unwrap().node_mut(f).unwrap();
+        node.layout.as_mut().unwrap().padding = [16.0, 24.0, 16.0, 24.0];
+    }
+    let out = {
+        let doc = s.doc().unwrap();
+        crate::codegen::code_for(doc, f, crate::codegen::CodeLang::Tailwind)
+    };
+    assert!(out.contains("py-4 "), "resolved 16 px wins: {out}");
+    assert!(!out.contains("py-space-l"), "no stale 24 px token: {out}");
+}
+#[test]
+fn fill_child_with_max_width_centers_under_a_centered_column() {
+    // Figma центрирует fill-ребёнка с max-width по counterAxisAlignItems, а CSS self-stretch
+    // прижимает его влево: добавляем mx-auto.
+    let mut s = Session::new();
+    let p = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 900, "name": "Page"})));
+    ex(&mut s, "layout.add", json!({"ids": [p], "direction": "vertical"}));
+    ex(&mut s, "node.set", json!({"id": p, "props": {"crossAlign": "center"}}));
+    let card = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 300, "height": 200, "parent": p, "name": "Card"})));
+    ex(&mut s, "layout.add", json!({"ids": [card], "direction": "vertical"}));
+    ex(&mut s, "node.set", json!({"id": card, "props": {"sizingH": "fill", "maxWidth": 300}}));
+    let out = code(&mut s, p, json!({}));
+    assert!(out.contains("mx-auto"), "fill child with max width centers: {out}");
+}
+#[test]
+fn single_line_text_does_not_wrap() {
+    let mut s = Session::new();
+    let t = idv(&ex(&mut s, "text.create", json!({"text": "Начать с точки входа", "x": 0, "y": 0})));
+    ex(&mut s, "node.set", json!({"id": t, "props": {"lineHeight": 170}}));
+    let out = code(&mut s, t, json!({}));
+    assert!(out.contains("nowrap"), "single-line text keeps one line: {out}");
+}

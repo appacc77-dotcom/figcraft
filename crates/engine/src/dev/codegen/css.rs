@@ -138,6 +138,18 @@ pub(super) fn tok(doc: &Document, n: &Node, fields: &[&str], value: String, t: &
     }
 }
 
+/// A layout length that prefers the layer's resolved value over a bound variable's token when they
+/// disagree: instances override bound padding/gap, and the token would put the design value back.
+fn tok_length(doc: &Document, n: &Node, fields: &[&str], actual: f64, t: &mut Tokens) -> String {
+    let px = format!("{}px", num(actual));
+    let Some(v) = fields.iter().find_map(|f| crate::devinspect::bound_variable(doc, n, f)) else { return px };
+    let same = matches!(
+        crate::cmd::proto_actions::default_value(&doc.variables, &v.id),
+        Some(figcraft_doc::VariableValue::Number(value)) if (value - actual).abs() < 0.01
+    );
+    if same { t.var(doc, v, px) } else { format!("{}px", num(actual)) }
+}
+
 pub(super) fn css(doc: &Document, id: NodeId) -> String {
     let Some(n) = doc.node(id) else { return String::new() };
     let mut t = Tokens::default();
@@ -244,13 +256,13 @@ fn layout_decls(doc: &Document, n: &Node, l: &figcraft_doc::AutoLayout, t: &mut 
     if l.wrap {
         put("flex-wrap", "wrap".into());
     }
-    put("gap", tok(doc, n, &["gap"], px(l.gap), t));
+    put("gap", tok_length(doc, n, &["gap"], l.gap, t));
     let [pt, pr, pb, pl] = l.padding;
     let sides = [
-        tok(doc, n, &PADDING[0], px(pt), t),
-        tok(doc, n, &PADDING[1], px(pr), t),
-        tok(doc, n, &PADDING[2], px(pb), t),
-        tok(doc, n, &PADDING[3], px(pl), t),
+        tok_length(doc, n, &PADDING[0], pt, t),
+        tok_length(doc, n, &PADDING[1], pr, t),
+        tok_length(doc, n, &PADDING[2], pb, t),
+        tok_length(doc, n, &PADDING[3], pl, t),
     ];
     put("padding", sides.join(" "));
     let justify = match l.main_align {
@@ -343,6 +355,16 @@ fn text_decls(doc: &Document, n: &Node, tx: &figcraft_doc::TextData, t: &mut Tok
         LineHeight::Pixels(v) => put("line-height", tok(doc, n, &["lineHeight"], px(v), t)),
         LineHeight::Percent(p) => put("line-height", format!("{}%", num(p))),
         LineHeight::Auto => {}
+    }
+    // Figma-текст, у которого высота ровно одна строка, не переносится; браузерный перенос
+    // из-за субпиксельной ширины шрифта — частая причина «лишней строки» в кнопках и заголовках.
+    let line = match s.line_height {
+        LineHeight::Pixels(v) => Some(v),
+        LineHeight::Percent(p) => Some(s.font_size * p / 100.0),
+        LineHeight::Auto => None,
+    };
+    if line.is_some_and(|line| line > 0.0 && n.height <= line * 1.15) {
+        put("white-space", "nowrap".into());
     }
     match s.letter_spacing {
         LetterSpacing::Pixels(v) if v != 0.0 => put("letter-spacing", tok(doc, n, &["letterSpacing"], px(v), t)),

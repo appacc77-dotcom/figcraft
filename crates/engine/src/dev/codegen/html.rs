@@ -1,5 +1,5 @@
 use super::css::{Tokens, css_decls};
-use super::{CodeLang, Ctx, Document, LayoutMode, Node, NodeId, NodeKind, Param, Sizing, indent, num, with_v_if};
+use super::{CodeLang, CrossAlign, Ctx, Document, LayoutMode, Node, NodeId, NodeKind, Param, Sizing, indent, num, with_v_if};
 
 // ------------------------------------------------------------------ HTML and React markup
 
@@ -327,6 +327,19 @@ impl<'c, 'a> Markup<'c, 'a> {
             // Кап по ширине макета сохраняем и для детей flex-строк: `flex: 1` растит бокс,
             // но не отменяет max-width (иначе контейнеры 1280/1184 разъезжаются на всю страницу).
             own = fluid(&own, n.width >= page - 0.5, n.layout.is_some());
+        }
+        // Figma: fill-ребёнок с max-width под центрирующей колонкой центрируется, а не
+        // прижимается влево, как self-stretch + max-width в CSS.
+        if in_flow
+            && let Some(parent_node) = parent
+            && let Some(parent_layout) = &parent_node.layout
+            && parent_layout.mode == LayoutMode::Vertical
+            && parent_layout.cross_align == CrossAlign::Center
+            && n.child_layout.sizing_h == Sizing::Fill
+            && n.child_layout.max_w.is_some()
+            && decls.contains("align-self: stretch")
+        {
+            decls.push_str("margin-inline: auto;\n");
         }
         if hug.0 && !matches!(n.kind, NodeKind::Text(_)) && !n.children.is_empty() {
             // Figma считает hug-ширину фрейма по содержимому; в CSS shrink-to-fit внутри
