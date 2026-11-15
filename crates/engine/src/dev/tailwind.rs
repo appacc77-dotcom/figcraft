@@ -282,7 +282,7 @@ fn decl(key: &str, value: &str) -> Vec<(String, String)> {
         ("border-radius", "50%") => kw("rounded-full"),
         ("border-radius", v) if v.strip_suffix("px").and_then(|n| n.parse::<f64>().ok()).is_some_and(|r| r >= 999.0) => kw("rounded-full"),
         ("border-radius", v) if v.contains(' ') && var_name(v).is_none() => one(format!("rounded-{}", arb(v))),
-        ("border-radius", v) => one(util("rounded", "radius", v, "")),
+        ("border-radius", v) => one(radius_util(v)),
         ("opacity", v) => match v.parse::<f64>() {
             Ok(o) if ((o * 100.0).round() - o * 100.0).abs() < 1e-9 => one(format!("opacity-{}", num(o * 100.0))),
             _ => one(util("opacity", "", v, "")),
@@ -351,6 +351,25 @@ pub fn classes(decls: &str) -> Vec<(String, String)> {
         })
         .flatten()
         .collect()
+}
+
+
+/// Tailwind's `rounded-s/e/t/r/b/l/tl/...` — directional side utilities. Radius-scale keys from
+/// Figma tokens (`--radius-s`, `--radius-l`) collide with them: `rounded-l` rounds only the left
+/// corners instead of the whole shape. Such keys use the parenthesised variable form instead.
+const RADIUS_SIDE_KEYS: &[&str] = &["s", "e", "t", "r", "b", "l", "ss", "se", "es", "ee", "tl", "tr", "bl", "br", "start", "end"];
+
+fn radius_util(value: &str) -> String {
+    if let Some(name) = var_name(value) {
+        if let Some(key) = name.strip_prefix("--radius-") {
+            if RADIUS_SIDE_KEYS.contains(&key) {
+                return format!("rounded-({name})");
+            }
+            return format!("rounded-{key}");
+        }
+        return format!("rounded-({name})");
+    }
+    format!("rounded-{}", arb(value))
 }
 
 /// The utility that undoes a mobile class at the breakpoint when desktop sets nothing for it.
@@ -542,4 +561,20 @@ pub fn code(doc: &Document, id: NodeId, mobile: Option<NodeId>) -> String {
 /// U+2029) becomes a space, so layer names in it can't end the comment and inject code.
 fn comment_safe(text: &str) -> String {
     text.chars().take(2_000).map(|c| if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') { ' ' } else { c }).collect()
+}
+#[cfg(test)]
+mod tests {
+    use super::classes;
+
+    #[test]
+    fn radius_scale_keys_do_not_collide_with_side_utilities() {
+        for key in ["s", "e", "t", "r", "b", "l", "tl", "br"] {
+            let decls = format!("border-radius: var(--radius-{key}, 16px);");
+            let got = classes(&decls);
+            assert_eq!(got[0].1, format!("rounded-(--radius-{key})"), "radius key {key}");
+        }
+        assert_eq!(classes("border-radius: var(--radius-m, 12px);")[0].1, "rounded-m");
+        assert_eq!(classes("border-radius: var(--radius-xs, 2px);")[0].1, "rounded-xs");
+        assert_eq!(classes("border-radius: 8px;")[0].1, "rounded-[8px]");
+    }
 }
