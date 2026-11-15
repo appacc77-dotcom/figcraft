@@ -97,6 +97,8 @@ fn jsx_text(s: &str) -> String {
             '}' => out.push_str("{\"}\"}"),
             '\n' => out.push_str("<br />"),
             '\r' => {}
+            // Unicode line/paragraph separators приходят из Figma как жёсткие переносы.
+            '\u{2028}' | '\u{2029}' => out.push_str("<br />"),
             c => out.push(c),
         }
     }

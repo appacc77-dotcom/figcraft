@@ -560,3 +560,15 @@ fn hug_frame_keeps_its_measured_height() {
     let out = { let doc = s.doc().unwrap(); crate::codegen::code_for(doc, p, crate::codegen::CodeLang::Tailwind) };
     assert!(out.contains("min-h-[73px]"), "hug frame keeps measured height: {out}");
 }
+#[test]
+fn unicode_line_separator_breaks_the_line_like_newline() {
+    // Figma отдаёт жёсткие переносы как U+2028/U+2029; в JSX это должен быть <br />,
+    // иначе браузер трактует их как обычный пробел и текст переносится не там.
+    let mut s = Session::new();
+    let p = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 300, "name": "Page"})));
+    ex(&mut s, "layout.add", json!({"ids": [p], "direction": "vertical"}));
+    let t = idv(&ex(&mut s, "text.create", json!({"text": "one\u{2028}two", "x": 0, "y": 0, "parent": p})));
+    let out = code(&mut s, p, json!({}));
+    assert!(out.contains("one<br />two"), "U+2028 becomes a hard break: {out}");
+    let _ = t;
+}

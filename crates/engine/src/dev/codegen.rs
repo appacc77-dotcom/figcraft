@@ -405,14 +405,14 @@ fn css_borders(doc: &Document, n: &Node, t: &mut Tokens) -> Vec<(String, String)
         let color = tok(doc, n, &["stroke"], c.to_css(), t);
         // Figma-обводка не занимает место в потоке (strokesIncluded=false): border сдвигал
         // детей на свою ширину (шапка/карточки уезжали на 0,5–1 px). outline рисуется поверх.
-        if !n.layout.as_ref().is_some_and(|l| l.strokes_included) && n.stroke.align == figcraft_doc::StrokeAlign::Inside {
+        if n.stroke.align == figcraft_doc::StrokeAlign::Inside {
             return vec![("outline".into(), format!("{weight} solid {color}")), ("outline-offset".into(), format!("-{weight}"))];
         }
         return vec![("border".into(), format!("{weight} solid {color}"))];
     };
     let color = tok(doc, n, &["stroke"], c.to_css(), t);
     let named = ["top", "right", "bottom", "left"].into_iter().zip(crate::cmd::props::STROKE_SIDES);
-    let inside = !n.layout.as_ref().is_some_and(|l| l.strokes_included) && n.stroke.align == figcraft_doc::StrokeAlign::Inside;
+    let inside = n.stroke.align == figcraft_doc::StrokeAlign::Inside;
     let mut shadows = Vec::new();
     let mut borders = Vec::new();
     for ((side, field), weight) in named.zip(sides).filter(|(_, weight)| *weight > 0.0) {
