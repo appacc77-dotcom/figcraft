@@ -88,6 +88,7 @@ fn html_escape(s: &str) -> String {
 /// Text as JSX children: HTML escapes, braces as expressions, line breaks as `<br />`.
 fn jsx_text(s: &str) -> String {
     let mut out = String::new();
+    let mut ends_with_break = false;
     for c in s.chars().take(10_000) {
         match c {
             '&' => out.push_str("&amp;"),
@@ -101,6 +102,11 @@ fn jsx_text(s: &str) -> String {
             '\u{2028}' | '\u{2029}' => out.push_str("<br />"),
             c => out.push(c),
         }
+        ends_with_break = matches!(c, '\n' | '\u{2028}' | '\u{2029}');
+    }
+    if ends_with_break {
+        // Завершающий перенос в Figma даёт пустую строку: после <br /> браузер её не рисует.
+        out.push('\u{200B}');
     }
     out
 }

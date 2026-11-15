@@ -572,3 +572,14 @@ fn unicode_line_separator_breaks_the_line_like_newline() {
     assert!(out.contains("one<br />two"), "U+2028 becomes a hard break: {out}");
     let _ = t;
 }
+#[test]
+fn trailing_hard_break_keeps_the_empty_last_line() {
+    // Figma height 3*28 при тексте "a\nb\n": браузер не рисует пустую строку после
+    // завершающего <br />, поэтому добавляем zero-width space.
+    let mut s = Session::new();
+    let p = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 300, "name": "Page"})));
+    ex(&mut s, "layout.add", json!({"ids": [p], "direction": "vertical"}));
+    ex(&mut s, "text.create", json!({"text": "a\nb\n", "x": 0, "y": 0, "parent": p}));
+    let out = code(&mut s, p, json!({}));
+    assert!(out.contains("a<br />b<br />\u{200B}"), "trailing break keeps an empty line: {out}");
+}
