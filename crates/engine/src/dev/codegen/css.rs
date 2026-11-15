@@ -453,10 +453,19 @@ fn decoration_decls(s: &figcraft_doc::TextStyle, put: &mut impl FnMut(&str, Stri
 /// (CSS angles: 0deg up, 90deg right), radial with its handles' radii, angular as a conic
 /// gradient from its start direction.
 fn css_gradient(g: &figcraft_color::Gradient, w: f64, h: f64, opacity: f32) -> String {
-    let stops = g
+    let raw: Vec<(String, f64)> = g
         .sorted_stops()
         .iter()
-        .map(|s| format!("{} {}%", s.color.with_alpha(s.color.a * opacity).to_css(), (s.position * 100.0).round()))
+        .map(|s| {
+            (
+                s.color.with_alpha(s.color.a * opacity).to_css(),
+                f64::from(s.position),
+            )
+        })
+        .collect();
+    let stops = raw
+        .iter()
+        .map(|(color, position)| format!("{color} {}%", (position * 100.0).round()))
         .collect::<Vec<_>>()
         .join(", ");
     let (dx, dy) = ((g.to.0 - g.from.0) * w, (g.to.1 - g.from.1) * h);
@@ -464,7 +473,62 @@ fn css_gradient(g: &figcraft_color::Gradient, w: f64, h: f64, opacity: f32) -> S
     let pct = |v: f64| format!("{}%", num(v * 100.0));
     let at = format!("at {} {}", pct(g.from.0), pct(g.from.1));
     match g.kind {
-        figcraft_color::GradientKind::Linear => format!("linear-gradient({}deg, {stops})", num(angle)),
+        figcraft_color::GradientKind::Linear => {
+            // Figma задаёт линейный градиент точками from→to в нормализованном боксе, а CSS —
+            // углом и позициями вдоль автоматической gradient line (проекция бокса). Переводим
+            // позиции стопов в координаты CSS-линии, иначе на непрямоугольных блоках (карточки
+            // 296×470) цветовые полосы едут по диагонали.
+            let len = dx.hypot(dy);
+            if len == 0.0 {
+                return format!("linear-gradient(180deg, {stops})");
+            }
+            let radians = angle.to_radians();
+            let (sx, sy) = (radians.sin(), -radians.cos());
+            let span = w * sx.abs() + h * sy.abs();
+            let mappable = span > 0.0;
+            let u0 = (g.from.0 * w - w / 2.0) * sx + (g.from.1 * h - h / 2.0) * sy + span / 2.0;
+            // CSS интерполирует градиент в premultiplied alpha, Figma — в обычном sRGB:
+            // на прозрачных стопах середина выходит светлее макета. Дробиv линии на мелкие
+            // сегменты, чтобы premultiplied-интерполяция шла по кривой Figma.
+            let sample = |t: f64| -> (f64, f64, f64, f64) {
+                let mut left = g.sorted_stops().first().copied();
+                for stop in g.sorted_stops() {
+                    let position = f64::from(stop.position);
+                    if position <= t {
+                        left = Some(stop);
+                    } else {
+                        let Some(from) = left else { return (0.0, 0.0, 0.0, 0.0) };
+                        let from_position = f64::from(from.position);
+                        let span = (position - from_position).max(1e-9);
+                        let k = ((t - from_position) / span).clamp(0.0, 1.0);
+                        let lerp = |a: f32, b: f32| f64::from(a) + (f64::from(b) - f64::from(a)) * k;
+                        return (
+                            lerp(from.color.r, stop.color.r),
+                            lerp(from.color.g, stop.color.g),
+                            lerp(from.color.b, stop.color.b),
+                            lerp(from.color.a, stop.color.a),
+                        );
+                    }
+                }
+                let last = g.sorted_stops().last().copied();
+                last.map(|stop| (f64::from(stop.color.r), f64::from(stop.color.g), f64::from(stop.color.b), f64::from(stop.color.a))).unwrap_or((0.0, 0.0, 0.0, 0.0))
+            };
+            let css_stops = if mappable {
+                let segments = 16usize;
+                (0..=segments)
+                    .map(|index| {
+                        let t = index as f64 / segments as f64;
+                        let (r, gr, b, a) = sample(t);
+                        let css_position = ((u0 + t * len) / span) * 100.0;
+                        format!("rgba({}, {}, {}, {}) {}%", (r * 255.0).round() as u8, (gr * 255.0).round() as u8, (b * 255.0).round() as u8, num(a * f64::from(opacity)), num(css_position))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            } else {
+                stops.clone()
+            };
+            format!("linear-gradient({}deg, {css_stops})", num(angle))
+        }
         figcraft_color::GradientKind::Radial | figcraft_color::GradientKind::Diamond => {
             let (rx, ry) = (((g.width.0 - g.from.0) * w).hypot((g.width.1 - g.from.1) * h), dx.hypot(dy));
             let rel = |r: f64, side: f64| if side > 0.0 { pct(r / side) } else { "50%".into() };

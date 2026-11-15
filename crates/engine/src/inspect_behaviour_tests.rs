@@ -355,3 +355,17 @@ fn rem_conversion_keeps_the_original_pixels() {
     assert_eq!(f("padding: 3px;", 16.0), "padding: 0.1875rem;");
     assert_eq!(f("gap: 0.5px;", 16.0), "gap: 0.03125rem;");
 }
+#[test]
+fn linear_gradient_stops_follow_the_handle_line() {
+    // Figma: from=(0.5,0.5) → to=(1.5,0.5) на боксе 100×100. CSS gradient line короче
+    // handle-линии и начинается с левого края, поэтому стопы 0/100 % ложатся в 50/150 %
+    // CSS-линии — иначе полосы градиента съезжают относительно макета.
+    let mut s = Session::new();
+    let r = rect(&mut s, 0.0, 0.0, 100.0, 100.0, None);
+    {
+        let d = s.doc_mut().unwrap();
+        d.get_mut(r).unwrap().fills = vec![gradient(GradientKind::Linear, (0.5, 0.5), (1.5, 0.5))];
+    }
+    let c = css(&mut s, r);
+    assert!(c.contains("50%") && c.contains("150%"), "stops map to the CSS gradient line: {c}");
+}
