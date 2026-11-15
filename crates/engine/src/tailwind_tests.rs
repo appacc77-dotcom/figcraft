@@ -542,3 +542,21 @@ fn auto_layout_parent_of_absolute_children_is_relative() {
     let out = code(&mut s, p, json!({}));
     assert!(out.matches("relative").count() >= 2, "auto-layout parent is positioned: {out}");
 }
+#[test]
+fn hug_frame_keeps_its_measured_height() {
+    // Браузерные метрики строк короче Figma на 1 px: min-height фиксирует измеренную высоту.
+    let mut s = Session::new();
+    let p = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 900, "name": "Page"})));
+    ex(&mut s, "layout.add", json!({"ids": [p], "direction": "vertical"}));
+    let head = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 200, "height": 100, "parent": p, "name": "Head"})));
+    ex(&mut s, "layout.add", json!({"ids": [head], "direction": "horizontal"}));
+    let text = idv(&ex(&mut s, "text.create", json!({"text": "01", "x": 0, "y": 0, "parent": head, "props": {"fontSize": 24}})));
+    ex(&mut s, "node.set", json!({"id": text, "props": {"lineHeight": 150}}));
+    {
+        let node = s.doc_mut().unwrap().node_mut(head).unwrap();
+        node.height = 73.0;
+        node.child_layout.sizing_v = figcraft_doc::Sizing::Hug;
+    }
+    let out = { let doc = s.doc().unwrap(); crate::codegen::code_for(doc, p, crate::codegen::CodeLang::Tailwind) };
+    assert!(out.contains("min-h-[73px]"), "hug frame keeps measured height: {out}");
+}

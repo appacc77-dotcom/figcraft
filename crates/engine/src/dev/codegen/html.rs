@@ -341,6 +341,12 @@ impl<'c, 'a> Markup<'c, 'a> {
         {
             decls.push_str("margin-inline: auto;\n");
         }
+        // Высота hug-фрейма в Figma — измеренная по контенту; браузерные метрики строк
+        // дают на 1 px меньше и копят сдвиг потока. min-height фиксирует эталонный размер и
+        // не мешает, если контент оказался выше.
+        if hug.1 && n.layout.is_some() && !matches!(n.kind, NodeKind::Text(_)) && !n.children.is_empty() && n.height > 0.0 {
+            own = format!("min-height: {}px;\n{own}", num(n.height));
+        }
         if hug.0 && !matches!(n.kind, NodeKind::Text(_)) && !n.children.is_empty() {
             // Figma считает hug-ширину фрейма по содержимому; в CSS shrink-to-fit внутри
             // узкого родителя зажимает её и текст переносится раньше макета. Фиксируем
