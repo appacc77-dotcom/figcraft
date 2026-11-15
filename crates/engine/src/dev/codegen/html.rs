@@ -298,6 +298,30 @@ impl<'c, 'a> Markup<'c, 'a> {
         }
     }
 
+
+    /// Внутренняя обводка у клипующего фрейма: outline/inset-shadow лежат под детьми, и
+    /// полноразмерный ребёнок закрывает их. Рисуем последним дочерним оверлеем с
+    /// inset-shadow — он идёт поверх контента и наследует скругление рамки.
+    fn stroke_overlay(&mut self, n: &Node, path: &str, depth: usize) {
+        if !n.clip || n.children.is_empty() || !n.has_visible_stroke() {
+            return;
+        }
+        if n.stroke.align != figcraft_doc::StrokeAlign::Inside || n.stroke.weight <= 0.0 || n.stroke.sides.is_some() {
+            return;
+        }
+        let Some(color) = n.strokes.iter().filter(|p| p.visible).find_map(|p| p.solid_color()) else { return };
+        let class = class_name(&format!("{} stroke overlay", n.name), "stroke-overlay", &mut self.used);
+        let decls = format!(
+            "position: absolute;\ninset: 0;\nborder-radius: inherit;\npointer-events: none;\nbox-shadow: inset 0 0 0 {}px {};\n",
+            num(n.stroke.weight),
+            color.to_css()
+        );
+        self.rule(&format!("{path}#stroke"), &class, decls);
+        let attr = if self.lang == CodeLang::React { "className" } else { "class" };
+        let pad = self.pad(depth);
+        self.markup.push_str(&format!("{pad}<div {attr}=\"{class}\"></div>\n"));
+    }
+
     fn element(&mut self, n: &Node, parent: Option<&Node>, depth: usize, path: &str) {
         let doc = self.ctx.doc;
         let root = n.id == self.ctx.root;
@@ -365,6 +389,10 @@ impl<'c, 'a> Markup<'c, 'a> {
         // родителя: без relative они уезжают к корню секции (табы/счётчики слайдера).
         if !n.children.is_empty() && !root && in_flow {
             own.push_str("position: relative;\n");
+        }
+        // Figma clipContent: содержимое кадрируется по рамке (и по её скруглению в CSS).
+        if n.clip {
+            own.push_str("overflow: hidden;\n");
         }
         decls.push_str(&own);
         self.rule(path, &class, decls);
@@ -443,6 +471,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                         Some(_) => self.markup.push_str(&format!("{p2}</>\n{p1})}}\n")),
                         None => {}
                     }
+                    self.stroke_overlay(n, path, depth + 1);
                     self.markup.push_str(&format!("{pad}</div>\n"));
                 }
             }

@@ -406,6 +406,11 @@ fn css_borders(doc: &Document, n: &Node, t: &mut Tokens) -> Vec<(String, String)
         // Figma-обводка не занимает место в потоке (strokesIncluded=false): border сдвигал
         // детей на свою ширину (шапка/карточки уезжали на 0,5–1 px). outline рисуется поверх.
         if n.stroke.align == figcraft_doc::StrokeAlign::Inside {
+            // У клипующего фрейма с детьми обводку рисует дочерний оверлей поверх контента:
+            // outline лёг бы под детей и был бы закрыт полноразмерным ребёнком.
+            if n.clip && !n.children.is_empty() {
+                return Vec::new();
+            }
             return vec![("outline".into(), format!("{weight} solid {color}")), ("outline-offset".into(), format!("-{weight}"))];
         }
         return vec![("border".into(), format!("{weight} solid {color}"))];

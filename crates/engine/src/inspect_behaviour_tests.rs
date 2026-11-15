@@ -403,3 +403,14 @@ fn text_max_lines_clamps_with_ellipsis() {
     let tw = { let doc = s.doc().unwrap(); crate::codegen::code_for(doc, t, crate::codegen::CodeLang::Tailwind) };
     assert!(tw.contains("[-webkit-line-clamp:2]"), "clamp tailwind: {tw}");
 }
+#[test]
+fn clipped_frame_with_inside_stroke_clips_and_draws_an_overlay() {
+    // clipContent + внутренняя обводка: ребёнок не должен перекрывать обводку.
+    let mut s = Session::new();
+    let f = id(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "props": {"width": 120, "height": 60, "clip": true, "cornerRadius": 12, "stroke": "#8A8560", "strokeWeight": 1, "strokeAlign": "inside", "layout": "horizontal"}})));
+    ex(&mut s, "node.create", json!({"parent": f, "type": "rectangle", "x": 0, "y": 0, "props": {"width": 120, "height": 60, "fill": "#222222"}}));
+    let code = { let doc = s.doc().unwrap(); crate::codegen::code_for(doc, f, crate::codegen::CodeLang::Tailwind) };
+    assert!(code.contains("[overflow:hidden]"), "clip: {code}");
+    assert!(code.contains("shadow-[inset_0_0_0_1px_#8A8560]"), "stroke overlay: {code}");
+    assert!(!code.contains("[outline:1px"), "outline must be replaced by the overlay: {code}");
+}
